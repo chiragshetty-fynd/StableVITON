@@ -8,6 +8,7 @@ services:
     container_name: virtual_tryon
     runtime: nvidia
     volumes:
+      - ./ckpts:/workspace/ckpts
       - ./image:/workspace/image
     ports:
       - 8888:8888
