@@ -34,6 +34,7 @@ model.eval()
 
 app = FastAPI()
 
+
 def imread(path, h=IMG_H, w=IMG_W, is_mask=False, in_inverse_mask=False, img=None):
     if not os.path.exists(path):
         raise FileNotFoundError(path)
@@ -68,7 +69,7 @@ def tryon(
     shape = (4, IMG_H // 8, IMG_W // 8)
     save_dir = SAVE_DIR
     os.makedirs(save_dir, exist_ok=True)
-    
+
     densepose_fn, mask_fn, agn_fn = preprocess(img_fn)
     image = imread(img_fn)
     cloth = imread(cloth_fn)
@@ -133,7 +134,6 @@ def tryon(
         cv2.imwrite(to_path, x_sample_img[:, :, ::-1])
 
     return to_path
-
 
 
 @app.post("/tryon")
