@@ -1,0 +1,11 @@
+*.pt
+*.pyc
+*.png
+*.jpg
+*.jpeg
+*.DS_Store
+*.ckpt
+
+.git
+ckpts/*
+.ipynb_checkpoints/*

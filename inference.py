@@ -13,6 +13,7 @@ from cldm.plms_hacked import PLMSSampler
 from cldm.model import create_model
 from utils import tensor2img
 
+
 def build_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_path", type=str, default="configs/VITON512.yaml")
@@ -36,7 +37,7 @@ def main(args):
     batch_size = args.batch_size
     img_H = args.img_H
     img_W = args.img_W
-    
+
     config = OmegaConf.load(args.config_path)
     config.model.params.img_H = args.img_H
     config.model.params.img_W = args.img_W
@@ -54,11 +55,13 @@ def main(args):
         img_W=img_W,
         is_paired=not args.unpair,
         is_test=True,
-        is_sorted=True
+        is_sorted=True,
     )
-    dataloader = DataLoader(dataset, num_workers=4, shuffle=False, batch_size=batch_size, pin_memory=True)
+    dataloader = DataLoader(
+        dataset, num_workers=4, shuffle=False, batch_size=batch_size, pin_memory=True
+    )
 
-    shape = (4, img_H//8, img_W//8) 
+    shape = (4, img_H // 8, img_W // 8)
     save_dir = opj(args.save_dir, "unpair" if args.unpair else "pair")
     os.makedirs(save_dir, exist_ok=True)
     for batch_idx, batch in enumerate(dataloader):
@@ -82,12 +85,12 @@ def main(args):
         sampler.model.batch = batch
 
         ts = torch.full((1,), 999, device=z.device, dtype=torch.long)
-        start_code = model.q_sample(z, ts)     
+        start_code = model.q_sample(z, ts)
 
         samples, _, _ = sampler.sample(
             args.denoise_steps,
             bs,
-            shape, 
+            shape,
             c,
             x_T=start_code,
             verbose=False,
@@ -96,16 +99,25 @@ def main(args):
         )
 
         x_samples = model.decode_first_stage(samples)
-        for sample_idx, (x_sample, fn,  cloth_fn) in enumerate(zip(x_samples, batch['img_fn'], batch["cloth_fn"])):
+        for sample_idx, (x_sample, fn, cloth_fn) in enumerate(
+            zip(x_samples, batch["img_fn"], batch["cloth_fn"])
+        ):
             x_sample_img = tensor2img(x_sample)  # [0, 255]
             if args.repaint:
-                repaint_agn_img = np.uint8((batch["image"][sample_idx].cpu().numpy()+1)/2 * 255)   # [0,255]
-                repaint_agn_mask_img = batch["agn_mask"][sample_idx].cpu().numpy()  # 0 or 1
-                x_sample_img = repaint_agn_img * repaint_agn_mask_img + x_sample_img * (1-repaint_agn_mask_img)
+                repaint_agn_img = np.uint8(
+                    (batch["image"][sample_idx].cpu().numpy() + 1) / 2 * 255
+                )  # [0,255]
+                repaint_agn_mask_img = (
+                    batch["agn_mask"][sample_idx].cpu().numpy()
+                )  # 0 or 1
+                x_sample_img = repaint_agn_img * repaint_agn_mask_img + x_sample_img * (
+                    1 - repaint_agn_mask_img
+                )
                 x_sample_img = np.uint8(x_sample_img)
 
             to_path = opj(save_dir, f"{fn.split('.')[0]}_{cloth_fn.split('.')[0]}.jpg")
-            cv2.imwrite(to_path, x_sample_img[:,:,::-1])
+            cv2.imwrite(to_path, x_sample_img[:, :, ::-1])
+
 
 if __name__ == "__main__":
     args = build_args()

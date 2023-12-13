@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+
+  virtual_tryon:
+    image: virtual_tryon:v1
+    env_file: .env
+    container_name: virtual_tryon
+    runtime: nvidia
+    volumes:
+      - ./image:/workspace/image
+    ports:
+      - 8888:8888
+    expose:
+      - 8888
+    restart: "always"

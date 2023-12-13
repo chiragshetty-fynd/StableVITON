@@ -2,6 +2,7 @@ import torch.nn as nn
 from transformers import CLIPVisionModel
 from .xf import LayerNorm, Transformer
 
+
 class AbstractEncoder(nn.Module):
     def __init__(self):
         super().__init__()
@@ -9,18 +10,20 @@ class AbstractEncoder(nn.Module):
     def encode(self, *args, **kwargs):
         raise NotImplementedError
 
+
 class FrozenCLIPImageEmbedder(AbstractEncoder):
     """Uses the CLIP transformer encoder for text (from Hugging Face)"""
+
     def __init__(self, version="openai/clip-vit-large-patch14"):
         super().__init__()
         self.transformer = CLIPVisionModel.from_pretrained(version)
         self.final_ln = LayerNorm(1024)
         self.mapper = Transformer(
-                1,
-                1024,
-                5,
-                1,
-            )
+            1,
+            1024,
+            5,
+            1,
+        )
 
         self.freeze()
 
@@ -46,7 +49,9 @@ class FrozenCLIPImageEmbedder(AbstractEncoder):
             image = image[0]
         return self(image)
 
+
 if __name__ == "__main__":
     from ldm.util import count_params
+
     model = FrozenCLIPImageEmbedder()
     count_params(model, verbose=True)

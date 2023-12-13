@@ -1,28 +1,23 @@
 import os
 from os.path import join as opj
 from omegaconf import OmegaConf
-from importlib import import_module
-import argparse
 
 import cv2
-import numpy as np
 import torch
-from torch.utils.data import DataLoader
+import numpy as np
 
-from cldm.plms_hacked import PLMSSampler
-from cldm.model import create_model
 from utils import tensor2img
+from cldm.model import create_model
+from cldm.plms_hacked import PLMSSampler
 
+from preprocess import preprocess
 
-CONFIG_PATH = "configs/VITON512.yaml"
-MODEL_LOAD_PATH = "ckpts/VITONHD.ckpt"
-DATA_ROOT_DIR = "VITONHD_DATA"
-REPAINT = True
-UNPAIR = True
-SAVE_DIR = "samples"
-DENOISE_STEPS = 50
 IMG_H = 512
 IMG_W = 384
+CONFIG_PATH = "configs/VITON512.yaml"
+MODEL_LOAD_PATH = "ckpts/VITONHD.ckpt"
+SAVE_DIR = "image"
+DENOISE_STEPS = 50
 ETA = 0.0
 
 
@@ -47,41 +42,34 @@ def imread(path, h=IMG_H, w=IMG_W, is_mask=False, in_inverse_mask=False, img=Non
 
 
 @torch.no_grad()
-def main(
+def tryon(
     img_fn,
     cloth_fn,
-    config_path=CONFIG_PATH,
-    model_load_path=MODEL_LOAD_PATH,
-    img_H=IMG_H,
-    img_W=IMG_W,
-    unpair=UNPAIR,
-    denoise_steps=DENOISE_STEPS,
-    save_dir=SAVE_DIR,
-    repaint=REPAINT,
-    eta=ETA,
 ):
-    config = OmegaConf.load(config_path)
-    config.model.params.img_H = img_H
-    config.model.params.img_W = img_W
+    img_fp = os.path.basename(img_fn)
+    cloth_fp = os.path.basename(cloth_fn)
+    _, ext = os.path.splitext(img_fp)
+    to_path = os.path.join(SAVE_DIR, img_fp.replace(ext, f"_{cloth_fp}"))
+    config = OmegaConf.load(CONFIG_PATH)
+    config.model.params.img_H = IMG_H
+    config.model.params.img_W = IMG_W
     params = config.model.params
 
     model = create_model(config_path=None, config=config)
-    model.load_state_dict(torch.load(model_load_path, map_location="cpu"))
+    model.load_state_dict(torch.load(MODEL_LOAD_PATH, map_location="cpu"))
     model = model.cuda()
     model.eval()
 
     sampler = PLMSSampler(model)
-    shape = (4, img_H // 8, img_W // 8)
-    save_dir = opj(save_dir, "unpair" if unpair else "pair")
+    shape = (4, IMG_H // 8, IMG_W // 8)
+    save_dir = SAVE_DIR
     os.makedirs(save_dir, exist_ok=True)
-
+    densepose_fn, mask_fn, agn_fn = preprocess(img_fn)
     image = imread(img_fn)
     cloth = imread(cloth_fn)
-    agn = imread(img_fn.replace(".jpg", "_agnostic.jpg"))
-    agn_mask = imread(
-        img_fn.replace(".jpg", "_mask.png"), is_mask=True, in_inverse_mask=True
-    )
-    image_densepose = imread(img_fn.replace(".jpg", "_densepose.jpg"))
+    agn = imread(agn_fn)
+    agn_mask = imread(mask_fn, is_mask=True, in_inverse_mask=True)
+    image_densepose = imread(densepose_fn)
 
     batch = {
         "agn": torch.unsqueeze(torch.from_numpy(agn), dim=0),
@@ -93,13 +81,6 @@ def main(
         "img_fn": [img_fn],
         "cloth_fn": [cloth_fn],
     }
-
-    for k, v in batch.items():
-        if isinstance(v, list):
-            print(f"{k}={v}")
-        else:
-            print(f"{k}={v.shape}")
-
 
     z, c = model.get_input(batch, params.first_stage_key)
     bs = z.shape[0]
@@ -119,13 +100,13 @@ def main(
     start_code = model.q_sample(z, ts)
 
     samples, _, _ = sampler.sample(
-        denoise_steps,
+        DENOISE_STEPS,
         bs,
         shape,
         c,
         x_T=start_code,
         verbose=False,
-        eta=eta,
+        eta=ETA,
         unconditional_conditioning=uc_full,
     )
 
@@ -134,24 +115,16 @@ def main(
         zip(x_samples, batch["img_fn"], batch["cloth_fn"])
     ):
         x_sample_img = tensor2img(x_sample)  # [0, 255]
-        if repaint:
-            repaint_agn_img = np.uint8(
-                (batch["image"][sample_idx].cpu().numpy() + 1) / 2 * 255
-            )  # [0,255]
-            repaint_agn_mask_img = batch["agn_mask"][sample_idx].cpu().numpy()  # 0 or 1
-            x_sample_img = repaint_agn_img * repaint_agn_mask_img + x_sample_img * (
-                1 - repaint_agn_mask_img
-            )
-            x_sample_img = np.uint8(x_sample_img)
+        repaint_agn_img = np.uint8(
+            (batch["image"][sample_idx].cpu().numpy() + 1) / 2 * 255
+        )  # [0,255]
+        repaint_agn_mask_img = batch["agn_mask"][sample_idx].cpu().numpy()  # 0 or 1
+        x_sample_img = repaint_agn_img * repaint_agn_mask_img + x_sample_img * (
+            1 - repaint_agn_mask_img
+        )
+        x_sample_img = np.uint8(x_sample_img)
 
-        img_fp = os.path.basename(img_fn)
-        cloth_fp = os.path.basename(cloth_fn)
-        to_path = os.path.join(save_dir, img_fp.replace('.jpg', f'_{cloth_fp}'))
-        print(f'{to_path=} {x_sample_img.shape=}')
+        print(f"Try On results saved to: {to_path}")
         cv2.imwrite(to_path, x_sample_img[:, :, ::-1])
 
-
-if __name__ == "__main__":
-    img_fn = "dataset/00008_00.jpg"
-    cloth_fn = "dataset/00035_00.jpg"
-    main(img_fn, cloth_fn)
+    return to_path
