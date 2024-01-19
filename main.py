@@ -1,4 +1,5 @@
 from process import tryon
+from erase_bg import erase_bg
 from fastapi import FastAPI, HTTPException, Form
 
 app = FastAPI()
@@ -12,6 +13,8 @@ async def virtual_tryon(
     try:
         img_path = img_path.strip()
         cloth_path = cloth_path.strip()
+        erase_bg(img_path)
+        erase_bg(cloth_path)
         img_cloth_path = tryon(img_path, cloth_path)
         return {"generated_image": img_cloth_path}
     except Exception as e:

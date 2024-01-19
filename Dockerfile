@@ -82,6 +82,7 @@ RUN pip install "detectron2-densepose @ git+https://github.com/facebookresearch/
 RUN pip install fastapi
 RUN pip install uvicorn
 RUN pip install python-multipart
+RUN pip install scikit-image
 
 
 WORKDIR /workspace
